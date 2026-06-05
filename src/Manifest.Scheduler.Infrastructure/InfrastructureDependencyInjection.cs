@@ -32,6 +32,9 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
 
         // ── Repositories ───────────────────────────────────────────────────────
+        // IPartyRepository — cross-hierarchy identity queries (existence checks, base record lookup)
+        services.AddScoped<IPartyRepository, PartyRepository>();
+        // Subtype repositories — creation and management of typed party records
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 
