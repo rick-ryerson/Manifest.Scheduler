@@ -1,4 +1,5 @@
 using Manifest.Scheduler.Domain.Common;
+using Manifest.Scheduler.Domain.GalacticSenate.Repositories;
 using Manifest.Scheduler.Infrastructure.Persistence;
 using Manifest.Scheduler.Infrastructure.Repositories;
 using Manifest.Scheduler.Infrastructure.Services;
@@ -31,7 +32,8 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
 
         // ── Repositories ───────────────────────────────────────────────────────
-        services.AddScoped<PartyRepository>();
+        services.AddScoped<IPersonRepository, PersonRepository>();
+        services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 
         return services;
     }
