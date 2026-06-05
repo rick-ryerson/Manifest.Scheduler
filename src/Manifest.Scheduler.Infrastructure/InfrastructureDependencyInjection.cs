@@ -38,6 +38,10 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 
+        // ── Services ───────────────────────────────────────────────────────────
+        services.AddScoped<IPersonService, PersonService>();
+        services.AddScoped<IOrganizationService, OrganizationService>();
+
         return services;
     }
 }
