@@ -1,4 +1,5 @@
 using Manifest.Scheduler.Domain.Common;
+using Manifest.Scheduler.Domain.GalacticSenate.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
@@ -15,6 +16,11 @@ public class ApplicationDbContext : DbContext
     {
         _currentTenantService = currentTenantService;
     }
+
+    public DbSet<Party> Parties => Set<Party>();
+    public DbSet<Person> People => Set<Person>();
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<PartyRole> PartyRoles => Set<PartyRole>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
