@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rickr\\\\source\\\\repos\\\\rick-ryerson\\\\Manifest.Scheduler\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(grep -E \"\\\\.\\(csproj|sln|json|md|yaml|yml\\)$\")"
+    ]
+  }
+}
