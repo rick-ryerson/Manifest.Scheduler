@@ -26,11 +26,28 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // ── TPT table mapping for the Party hierarchy ──────────────────────────
+        // Each concrete type gets its own table; EF Core links them via a shared PK.
+        // PersonService / OrganizationService rely on these table names when they
+        // use ExecuteSqlAsync to insert only into a subtype table for an existing Party.
+        modelBuilder.Entity<Party>().ToTable("Parties");
+        modelBuilder.Entity<Person>().ToTable("People");
+        modelBuilder.Entity<Organization>().ToTable("Organizations");
+
         // Apply a global query filter for all entities that implement IMustHaveTenant,
         // automatically scoping every query to the current tenant.
+        // Only the root of each hierarchy gets the filter; EF Core propagates it to
+        // derived types automatically. Setting it on derived types too causes:
+        //   "A filter may only be applied to the root entity type."
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (!typeof(IMustHaveTenant).IsAssignableFrom(entityType.ClrType))
+                continue;
+
+            // Skip derived types whose immediate base also implements IMustHaveTenant
+            // (e.g. Person : Party, Organization : Party — Party carries the filter).
+            if (entityType.BaseType != null &&
+                typeof(IMustHaveTenant).IsAssignableFrom(entityType.BaseType.ClrType))
                 continue;
 
             var parameter = Expression.Parameter(entityType.ClrType, "e");
