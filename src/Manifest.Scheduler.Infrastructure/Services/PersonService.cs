@@ -53,8 +53,11 @@ public class PersonService : IPersonService
         // With TPT the Parties row already exists; TenantId lives in Parties (not People),
         // so we insert only the subtype columns into the People table.
         // ExecuteSqlAsync with a FormattableString uses parameterized SQL — no injection risk.
+        // Double-quoted table name is ANSI SQL and works across SQL Server, PostgreSQL,
+        // and SQLite. Unquoted "People" would be folded to lowercase by PostgreSQL and
+        // fail to resolve the case-sensitive "People" table created by EF Core.
         await _context.Database.ExecuteSqlAsync(
-            $"INSERT INTO People (Id, FirstName, LastName) VALUES ({person.Id}, {person.FirstName}, {person.LastName})",
+            $"INSERT INTO \"People\" (\"Id\", \"FirstName\", \"LastName\") VALUES ({person.Id}, {person.FirstName}, {person.LastName})",
             ct);
 
         return person;

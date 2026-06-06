@@ -53,8 +53,11 @@ public class OrganizationService : IOrganizationService
         // With TPT the Parties row already exists; TenantId lives in Parties (not Organizations),
         // so we insert only the subtype columns into the Organizations table.
         // ExecuteSqlAsync with a FormattableString uses parameterized SQL — no injection risk.
+        // Double-quoted table name is ANSI SQL and works across SQL Server, PostgreSQL,
+        // and SQLite. Unquoted "Organizations" would be folded to lowercase by PostgreSQL
+        // and fail to resolve the case-sensitive "Organizations" table created by EF Core.
         await _context.Database.ExecuteSqlAsync(
-            $"INSERT INTO Organizations (Id, Name) VALUES ({organization.Id}, {organization.Name})",
+            $"INSERT INTO \"Organizations\" (\"Id\", \"Name\") VALUES ({organization.Id}, {organization.Name})",
             ct);
 
         return organization;
