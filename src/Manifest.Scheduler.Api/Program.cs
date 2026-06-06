@@ -1,4 +1,6 @@
 using Manifest.Scheduler.Infrastructure;
+using Manifest.Scheduler.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +24,16 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+// ── Database migration ────────────────────────────────────────────────────
+// Auto-apply pending EF Core migrations on startup.
+// This is safe for containerised deployments; in production consider a
+// dedicated migration job or a startup health-check gate instead.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 // ── Middleware ────────────────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
