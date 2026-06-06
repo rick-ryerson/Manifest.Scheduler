@@ -36,11 +36,11 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "Manifest Scheduler v1"));
-}
+// Swagger is enabled in all environments so the containerised API is
+// explorable at http://localhost:8080/swagger without needing to set
+// ASPNETCORE_ENVIRONMENT=Development.
+app.UseSwagger();
+app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "Manifest Scheduler v1"));
 
 app.UseHttpsRedirection();
 app.UseExceptionHandler();   // global handler — converts unhandled exceptions to ProblemDetails
