@@ -2,14 +2,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy solution and project files first so NuGet restore is cached separately
-# from source code changes.
-COPY Manifest.Scheduler.sln ./
+# Copy only the source project files first so NuGet restore is cached separately
+# from source code changes. We intentionally do NOT copy the solution file because
+# it references the test project which is excluded by .dockerignore.
 COPY src/Manifest.Scheduler.Domain/Manifest.Scheduler.Domain.csproj          src/Manifest.Scheduler.Domain/
 COPY src/Manifest.Scheduler.Infrastructure/Manifest.Scheduler.Infrastructure.csproj  src/Manifest.Scheduler.Infrastructure/
 COPY src/Manifest.Scheduler.Api/Manifest.Scheduler.Api.csproj                src/Manifest.Scheduler.Api/
 
-RUN dotnet restore
+RUN dotnet restore src/Manifest.Scheduler.Api/Manifest.Scheduler.Api.csproj
 
 # Copy the remaining source (tests excluded via .dockerignore)
 COPY src/ src/
