@@ -37,10 +37,12 @@ public static class InfrastructureDependencyInjection
         // Subtype repositories — creation and management of typed party records
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IPartyRoleRepository, PartyRoleRepository>();
 
         // ── Services ───────────────────────────────────────────────────────────
         services.AddScoped<IPersonService, PersonService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IPartyRoleService, PartyRoleService>();
 
         return services;
     }

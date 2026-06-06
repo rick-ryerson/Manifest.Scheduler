@@ -2,49 +2,36 @@ using Manifest.Scheduler.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// ── Infrastructure (EF Core, tenant resolution, repositories, services) ────
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// ── API ───────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new()
+    {
+        Title = "Manifest Scheduler API",
+        Version = "v1",
+        Description = "GalacticSenate UDM — Party, Person, and Organization management"
+    });
+});
+
+// ProblemDetails support for standardised error responses (RFC 7807)
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ── Middleware ────────────────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "Manifest Scheduler v1"));
 }
 
 app.UseHttpsRedirection();
+app.UseExceptionHandler();   // global handler — converts unhandled exceptions to ProblemDetails
 app.MapControllers();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

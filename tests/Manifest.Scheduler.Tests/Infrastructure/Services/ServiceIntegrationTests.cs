@@ -60,6 +60,16 @@ public class ServiceIntegrationTests : IDisposable
     }
 
     /// <summary>
+    /// Builds a mock ICurrentTenantService for a given tenantId.
+    /// </summary>
+    private static ICurrentTenantService BuildTenantService(Guid tenantId)
+    {
+        var mock = new Mock<ICurrentTenantService>();
+        mock.Setup(s => s.CurrentTenantId).Returns(tenantId);
+        return mock.Object;
+    }
+
+    /// <summary>
     /// Builds a PersonService and its dependencies, all sharing the test connection
     /// and scoped to <paramref name="tenantId"/>.
     /// </summary>
@@ -68,7 +78,8 @@ public class ServiceIntegrationTests : IDisposable
         var ctx = BuildContext(tenantId);
         var personRepo = new PersonRepository(ctx);
         var partyRepo = new PartyRepository(ctx);
-        var service = new PersonService(personRepo, partyRepo, ctx);
+        var tenantService = BuildTenantService(tenantId);
+        var service = new PersonService(personRepo, partyRepo, ctx, tenantService);
         return (service, ctx);
     }
 
@@ -80,7 +91,8 @@ public class ServiceIntegrationTests : IDisposable
         var ctx = BuildContext(tenantId);
         var orgRepo = new OrganizationRepository(ctx);
         var partyRepo = new PartyRepository(ctx);
-        var service = new OrganizationService(orgRepo, partyRepo, ctx);
+        var tenantService = BuildTenantService(tenantId);
+        var service = new OrganizationService(orgRepo, partyRepo, ctx, tenantService);
         return (service, ctx);
     }
 
@@ -100,12 +112,7 @@ public class ServiceIntegrationTests : IDisposable
         var tenantId = Guid.NewGuid();
         var (service, _) = BuildPersonService(tenantId);
 
-        var person = new Person
-        {
-            TenantId = tenantId,
-            FirstName = "Leia",
-            LastName = "Organa"
-        };
+        var person = new Person { FirstName = "Leia", LastName = "Organa" };
 
         // Act
         var created = await service.CreatePersonAsync(person);
@@ -130,8 +137,40 @@ public class ServiceIntegrationTests : IDisposable
     }
 
     /// <summary>
-    /// TenantId set on the Person entity must be persisted to the database
-    /// and readable back through the tenant-scoped query filter.
+    /// The service must overwrite any caller-supplied TenantId with the resolved
+    /// tenant from ICurrentTenantService so callers cannot stamp records with a
+    /// foreign tenant's ID.
+    /// </summary>
+    [Fact]
+    public async Task CreatePersonAsync_OverwritesTenantIdFromCurrentTenantService()
+    {
+        // Arrange
+        var realTenantId = Guid.NewGuid();
+        var spoofedTenantId = Guid.NewGuid(); // caller tries to set a different tenant
+        var (service, _) = BuildPersonService(realTenantId);
+
+        var person = new Person
+        {
+            TenantId = spoofedTenantId, // should be ignored
+            FirstName = "Han",
+            LastName = "Solo"
+        };
+
+        // Act
+        var created = await service.CreatePersonAsync(person);
+
+        // Assert — TenantId must reflect the service's resolved tenant, not the caller's value
+        Assert.Equal(realTenantId, created.TenantId);
+
+        using var verifyCtx = BuildContext(realTenantId);
+        var persisted = await verifyCtx.People.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == created.Id);
+        Assert.NotNull(persisted);
+        Assert.Equal(realTenantId, persisted.TenantId);
+    }
+
+    /// <summary>
+    /// TenantId set by the service must be persisted and readable through the
+    /// tenant-scoped query filter (i.e. the record is visible to the correct tenant).
     /// </summary>
     [Fact]
     public async Task CreatePersonAsync_PersistsTenantId()
@@ -140,15 +179,8 @@ public class ServiceIntegrationTests : IDisposable
         var tenantId = Guid.NewGuid();
         var (service, _) = BuildPersonService(tenantId);
 
-        var person = new Person
-        {
-            TenantId = tenantId,
-            FirstName = "Han",
-            LastName = "Solo"
-        };
-
         // Act
-        var created = await service.CreatePersonAsync(person);
+        var created = await service.CreatePersonAsync(new Person { FirstName = "Han", LastName = "Solo" });
 
         // Assert — read back through the same tenant-scoped context
         using var verifyCtx = BuildContext(tenantId);
@@ -174,36 +206,31 @@ public class ServiceIntegrationTests : IDisposable
         var tenantId = Guid.NewGuid();
         var (orgService, _) = BuildOrganizationService(tenantId);
 
-        var org = await orgService.CreateOrganizationAsync(new Organization
-        {
-            TenantId = tenantId,
-            Name = "Rebel Alliance"
-        });
-
+        var org = await orgService.CreateOrganizationAsync(new Organization { Name = "Rebel Alliance" });
         var existingPartyId = org.Id;
 
         // Act — assign a Person record to that same Party identity
         var (personService, _) = BuildPersonService(tenantId);
-
-        var person = new Person { FirstName = "Mon", LastName = "Mothma" };
-        var assigned = await personService.AssignPersonToPartyAsync(existingPartyId, person);
+        var assigned = await personService.AssignPersonToPartyAsync(
+            existingPartyId,
+            new Person { FirstName = "Mon", LastName = "Mothma" });
 
         // Assert
         using var verifyCtx = BuildContext(tenantId);
-
         var personRow = await verifyCtx.People
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == existingPartyId);
 
         Assert.NotNull(personRow);
         Assert.Equal(existingPartyId, assigned.Id);
+        Assert.Equal(tenantId, assigned.TenantId);
         Assert.Equal("Mon", personRow.FirstName);
         Assert.Equal("Mothma", personRow.LastName);
     }
 
     /// <summary>
-    /// AssignPersonToPartyAsync must throw when the target Party does not exist,
-    /// leaving the database unchanged.
+    /// AssignPersonToPartyAsync must throw when the target Party does not exist
+    /// in the current tenant's scope.
     /// </summary>
     [Fact]
     public async Task AssignPersonToPartyAsync_ThrowsWhenPartyDoesNotExist()
@@ -212,15 +239,35 @@ public class ServiceIntegrationTests : IDisposable
         var tenantId = Guid.NewGuid();
         var (service, _) = BuildPersonService(tenantId);
 
-        var ghostPartyId = Guid.NewGuid(); // never persisted
-
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.AssignPersonToPartyAsync(ghostPartyId, new Person
+            () => service.AssignPersonToPartyAsync(Guid.NewGuid(), new Person
             {
                 FirstName = "Ghost",
                 LastName = "Nobody"
             }));
+    }
+
+    /// <summary>
+    /// A Party that belongs to Tenant B must not be assignable from a service
+    /// scoped to Tenant A — the tenant-filtered ExistsAsync check must prevent it.
+    /// </summary>
+    [Fact]
+    public async Task AssignPersonToPartyAsync_ThrowsWhenPartyBelongsToADifferentTenant()
+    {
+        // Arrange — create a Party under Tenant B
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        var (orgServiceB, _) = BuildOrganizationService(tenantB);
+        var orgB = await orgServiceB.CreateOrganizationAsync(new Organization { Name = "Empire" });
+
+        // Act — try to assign a Person to Tenant B's Party from a Tenant A service
+        var (personServiceA, _) = BuildPersonService(tenantA);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => personServiceA.AssignPersonToPartyAsync(
+                orgB.Id, new Person { FirstName = "Darth", LastName = "Vader" }));
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -242,22 +289,10 @@ public class ServiceIntegrationTests : IDisposable
         var (serviceA, _) = BuildPersonService(tenantA);
         var (serviceB, _) = BuildPersonService(tenantB);
 
-        // Seed one Person per tenant
-        await serviceA.CreatePersonAsync(new Person
-        {
-            TenantId = tenantA,
-            FirstName = "Luke",
-            LastName = "Skywalker"
-        });
+        await serviceA.CreatePersonAsync(new Person { FirstName = "Luke", LastName = "Skywalker" });
+        await serviceB.CreatePersonAsync(new Person { FirstName = "Darth", LastName = "Vader" });
 
-        await serviceB.CreatePersonAsync(new Person
-        {
-            TenantId = tenantB,
-            FirstName = "Darth",
-            LastName = "Vader"
-        });
-
-        // Act — each service reads its own context (tenant-filtered)
+        // Act — each context is tenant-filtered
         using var ctxA = BuildContext(tenantA);
         using var ctxB = BuildContext(tenantB);
 
@@ -285,7 +320,8 @@ public class ServiceIntegrationTests : IDisposable
 
     /// <summary>
     /// CreateOrganizationAsync must insert into both Parties and Organizations
-    /// tables (TPT), and the TenantId must be persisted correctly.
+    /// tables (TPT), stamp the correct TenantId, and the record must be readable
+    /// through the tenant-scoped filter.
     /// </summary>
     [Fact]
     public async Task CreateOrganizationAsync_InsertsRowsInBothPartiesAndOrganizationsTables()
@@ -294,14 +330,8 @@ public class ServiceIntegrationTests : IDisposable
         var tenantId = Guid.NewGuid();
         var (service, _) = BuildOrganizationService(tenantId);
 
-        var org = new Organization
-        {
-            TenantId = tenantId,
-            Name = "Galactic Senate"
-        };
-
         // Act
-        var created = await service.CreateOrganizationAsync(org);
+        var created = await service.CreateOrganizationAsync(new Organization { Name = "Galactic Senate" });
 
         // Assert
         using var verifyCtx = BuildContext(tenantId);
