@@ -1,0 +1,42 @@
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: scheduler_pass
+      POSTGRES_DB: ManifestScheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d ManifestScheduler"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── API ────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Override the connection string so the API points at the 'db' service.
+      # EF Core Npgsql format: Host=<service-name>;Port=...;Database=...
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;Port=5432;Database=ManifestScheduler;
+        Username=scheduler;Password=scheduler_pass
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

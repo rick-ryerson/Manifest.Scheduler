@@ -15,9 +15,49 @@ dotnet test
 dotnet test --filter "FullyQualifiedName~ClassName"
 dotnet test --filter "FullyQualifiedName~ClassName.MethodName"
 
-# Run the API
+# Run the API locally (requires a local PostgreSQL instance on port 5432)
 dotnet run --project src/Manifest.Scheduler.Api
 ```
+
+## Docker
+
+The application is containerised with a multi-stage `Dockerfile` and orchestrated via `docker-compose.yml`.
+
+```bash
+# Build images and start all services (API + PostgreSQL) in the foreground
+docker-compose up --build
+
+# Run in the background
+docker-compose up --build -d
+
+# Tail logs when running detached
+docker-compose logs -f api
+
+# Stop and remove containers (data volume is preserved)
+docker-compose down
+
+# Stop and remove containers AND the data volume (full reset)
+docker-compose down -v
+```
+
+### Services
+
+| Service | Container port | Host port | Notes |
+|---------|---------------|-----------|-------|
+| `api`   | 8080          | 8080      | Swagger UI at `http://localhost:8080/swagger` |
+| `db`    | 5432          | 5432      | PostgreSQL 16 (user: `scheduler`, db: `ManifestScheduler`) |
+
+On first start the API automatically applies any pending EF Core migrations via `Database.Migrate()` in `Program.cs`. The API waits for the database to pass its health-check before starting (configured via `depends_on: condition: service_healthy`).
+
+### Environment variables
+
+The `docker-compose.yml` overrides the connection string for the `api` service using the environment variable convention:
+
+```
+ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=ManifestScheduler;Username=scheduler;Password=scheduler_pass
+```
+
+To supply secrets outside of Compose, set the variable in your shell or a `.env` file before running `docker-compose up`.
 
 ## Architecture
 

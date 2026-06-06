@@ -21,9 +21,9 @@ public static class InfrastructureDependencyInjection
     {
         // ── Persistence ────────────────────────────────────────────────────────
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(
+            options.UseNpgsql(
                 config.GetConnectionString("DefaultConnection"),
-                sql => sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+                npgsql => npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
 
         // ── Tenant resolution ──────────────────────────────────────────────────
         // IHttpContextAccessor is required by CurrentTenantService to read
