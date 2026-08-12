@@ -2,6 +2,7 @@ using Manifest.Scheduler.Domain.Common;
 using Manifest.Scheduler.Domain.GalacticSenate.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Manifest.Scheduler.Infrastructure.Persistence;
 
@@ -21,6 +22,16 @@ public class ApplicationDbContext : DbContext
     public DbSet<Person> People => Set<Person>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<PartyRole> PartyRoles => Set<PartyRole>();
+
+    // Referenced by the query filter below via `this.CurrentTenantId` rather than capturing
+    // _currentTenantService directly. EF Core caches the compiled model (including query
+    // filter expressions) once per DbContextOptions for the app's lifetime; a filter that
+    // captures an injected service as an Expression.Constant freezes that specific instance
+    // forever, so every request after the first would see the first request's tenant. A
+    // `this`-scoped member access is special-cased by EF Core to re-resolve against whichever
+    // DbContext instance is actually executing the query, so this stays correct per-request
+    // while keeping model caching enabled.
+    private Guid CurrentTenantId => _currentTenantService.CurrentTenantId ?? Guid.Empty;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,15 +64,19 @@ public class ApplicationDbContext : DbContext
             var parameter = Expression.Parameter(entityType.ClrType, "e");
             var tenantIdProperty = Expression.Property(parameter, nameof(IMustHaveTenant.TenantId));
 
-            // _currentTenantService.CurrentTenantId ?? Guid.Empty
-            var currentTenantServiceExpr = Expression.Constant(_currentTenantService);
-            var currentTenantIdExpr = Expression.Property(currentTenantServiceExpr,
-                nameof(ICurrentTenantService.CurrentTenantId));
-            var emptyGuid = Expression.Constant(Guid.Empty);
-            var coalesce = Expression.Coalesce(currentTenantIdExpr, emptyGuid);
+            // this.CurrentTenantId — a `this`-scoped member access, not a captured service
+            // instance. See the CurrentTenantId property above for why this matters.
+            // The constant's type must be pinned to ApplicationDbContext explicitly: a bare
+            // Expression.Constant(this) infers its type from the runtime type (e.g. a test
+            // subclass like TestableDbContext), and CurrentTenantId — being private — can't be
+            // resolved by name against a derived type via reflection.
+            var dbContextExpr = Expression.Constant(this, typeof(ApplicationDbContext));
+            var currentTenantIdPropertyInfo = typeof(ApplicationDbContext).GetProperty(
+                nameof(CurrentTenantId), BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var currentTenantIdExpr = Expression.Property(dbContextExpr, currentTenantIdPropertyInfo);
 
             var filter = Expression.Lambda(
-                Expression.Equal(tenantIdProperty, coalesce),
+                Expression.Equal(tenantIdProperty, currentTenantIdExpr),
                 parameter);
 
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(filter);
