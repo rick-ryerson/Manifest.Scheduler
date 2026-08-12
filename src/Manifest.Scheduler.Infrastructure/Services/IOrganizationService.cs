@@ -21,4 +21,22 @@ public interface IOrganizationService
     /// since the Parties row already exists.
     /// </summary>
     Task<Organization> AssignOrganizationToPartyAsync(Guid partyId, Organization organization, CancellationToken ct = default);
+
+    /// <summary>Returns the Organization with the given Id, or null if it doesn't exist in the current tenant.</summary>
+    Task<Organization?> GetOrganizationByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Returns all Organizations in the current tenant.</summary>
+    Task<List<Organization>> GetAllOrganizationsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates Name for an existing Organization.
+    /// Throws <see cref="InvalidOperationException"/> if the Organization does not exist in the current tenant.
+    /// </summary>
+    Task<Organization> UpdateOrganizationAsync(Guid id, Organization organization, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes an Organization (and its underlying Party identity). No-ops silently if it does not exist.
+    /// Associated PartyRoles are removed via ON DELETE CASCADE.
+    /// </summary>
+    Task DeleteOrganizationAsync(Guid id, CancellationToken ct = default);
 }

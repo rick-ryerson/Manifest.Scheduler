@@ -92,7 +92,7 @@ Every write must resolve a tenant. `ICurrentTenantService` (implemented by `Curr
 
 `ApplicationDbContext` (`Infrastructure/Persistence`) maps `Party`/`Person`/`Organization` using **table-per-type**: `Parties`, `People`, `Organizations` (shared PK across the hierarchy), plus `PartyRoles`. PostgreSQL via Npgsql — identifiers are case-sensitive and quoted (`"People"`, not `people`).
 
-The global query filter is applied only to the **root** entity type in each `IMustHaveTenant` hierarchy (EF Core disallows filters on non-root TPT types), filtering `TenantId == (CurrentTenantId ?? Guid.Empty)`. Because `Party` is abstract, assigning a subtype to an existing Party row (e.g. `AssignPersonToPartyAsync`) uses a raw parameterized `INSERT INTO "People" (...)` rather than `DbSet.Add`, since the `Parties` row already exists and only the subtype table needs a row.
+The global query filter is applied only to the **root** entity type in each `IMustHaveTenant` hierarchy (EF Core disallows filters on non-root TPT types), filtering `TenantId == CurrentTenantId` via a private `CurrentTenantId` property on `ApplicationDbContext` itself. This indirection matters: EF Core caches the compiled model (including query filter expressions) once per `DbContextOptions` for the app's lifetime. A filter that captures the injected `ICurrentTenantService` directly as an `Expression.Constant` freezes that specific instance into the cached model forever — every request after the first would silently see the first request's tenant data, since a fresh `ApplicationDbContext` (and a fresh `ICurrentTenantService` reading the current `X-Tenant-Id`) is constructed per request but the compiled filter itself isn't. Referencing a `this`-scoped member instead (`this.CurrentTenantId`) is specially handled by EF Core, which re-resolves it against whichever instance is actually executing the query, keeping the model cache (and its performance benefit) intact while staying correct per-request. See `ApplicationDbContextTests.GlobalQueryFilter_ReEvaluatesPerInstance_WhenModelIsCachedAcrossInstances` for a regression test that reproduces this exact failure mode. Because `Party` is abstract, assigning a subtype to an existing Party row (e.g. `AssignPersonToPartyAsync`) uses a raw parameterized `INSERT INTO "People" (...)` rather than `DbSet.Add`, since the `Parties` row already exists and only the subtype table needs a row.
 
 ## API reference
 
@@ -102,8 +102,16 @@ Single controller, `PartyController` (`src/Manifest.Scheduler.Api/Controllers`),
 |--------|-------|---------|
 | `POST` | `/api/Party/people` | Create a Person (inserts `Parties` + `People` in one transaction) |
 | `POST` | `/api/Party/people/{partyId}/assign` | Assign the Person subtype to an existing Party |
+| `GET` | `/api/Party/people/{id}` | Get a Person by Id |
+| `GET` | `/api/Party/people` | List all People in the current tenant |
+| `PUT` | `/api/Party/people/{id}` | Update a Person's FirstName/LastName |
+| `DELETE` | `/api/Party/people/{id}` | Delete a Person (cascades to its Party identity and PartyRoles) |
 | `POST` | `/api/Party/organizations` | Create an Organization (inserts `Parties` + `Organizations`) |
 | `POST` | `/api/Party/organizations/{partyId}/assign` | Assign the Organization subtype to an existing Party |
+| `GET` | `/api/Party/organizations/{id}` | Get an Organization by Id |
+| `GET` | `/api/Party/organizations` | List all Organizations in the current tenant |
+| `PUT` | `/api/Party/organizations/{id}` | Update an Organization's Name |
+| `DELETE` | `/api/Party/organizations/{id}` | Delete an Organization (cascades to its Party identity and PartyRoles) |
 | `POST` | `/api/Party/{partyId}/roles` | Assign a `PartyRoleType` role to a Party |
 | `GET` | `/api/Party/{partyId}/roles` | List roles for a Party |
 | `DELETE` | `/api/Party/roles/{roleId}` | Remove a role assignment |

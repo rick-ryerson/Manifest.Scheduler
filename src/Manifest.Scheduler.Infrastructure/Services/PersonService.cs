@@ -63,6 +63,32 @@ public class PersonService : IPersonService
         return person;
     }
 
+    /// <inheritdoc/>
+    public async Task<Person?> GetPersonByIdAsync(Guid id, CancellationToken ct = default)
+        => await _personRepository.GetByIdAsync(id, ct);
+
+    /// <inheritdoc/>
+    public async Task<List<Person>> GetAllPeopleAsync(CancellationToken ct = default)
+        => await _personRepository.GetAllAsync(ct);
+
+    /// <inheritdoc/>
+    public async Task<Person> UpdatePersonAsync(Guid id, Person person, CancellationToken ct = default)
+    {
+        // GetByIdAsync runs through the tenant-scoped query filter, so this also
+        // verifies the Person belongs to the current tenant.
+        var existing = await _personRepository.GetByIdAsync(id, ct)
+            ?? throw new InvalidOperationException($"Person {id} does not exist.");
+
+        existing.FirstName = person.FirstName;
+        existing.LastName = person.LastName;
+
+        return await _personRepository.UpdateAsync(existing, ct);
+    }
+
+    /// <inheritdoc/>
+    public async Task DeletePersonAsync(Guid id, CancellationToken ct = default)
+        => await _personRepository.DeleteAsync(id, ct);
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private Guid CurrentTenantIdOrThrow()

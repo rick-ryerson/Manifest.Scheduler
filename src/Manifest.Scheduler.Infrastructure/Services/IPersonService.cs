@@ -21,4 +21,22 @@ public interface IPersonService
     /// since the Parties row already exists.
     /// </summary>
     Task<Person> AssignPersonToPartyAsync(Guid partyId, Person person, CancellationToken ct = default);
+
+    /// <summary>Returns the Person with the given Id, or null if it doesn't exist in the current tenant.</summary>
+    Task<Person?> GetPersonByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Returns all People in the current tenant.</summary>
+    Task<List<Person>> GetAllPeopleAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates FirstName/LastName for an existing Person.
+    /// Throws <see cref="InvalidOperationException"/> if the Person does not exist in the current tenant.
+    /// </summary>
+    Task<Person> UpdatePersonAsync(Guid id, Person person, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a Person (and its underlying Party identity). No-ops silently if it does not exist.
+    /// Associated PartyRoles are removed via ON DELETE CASCADE.
+    /// </summary>
+    Task DeletePersonAsync(Guid id, CancellationToken ct = default);
 }

@@ -63,6 +63,31 @@ public class OrganizationService : IOrganizationService
         return organization;
     }
 
+    /// <inheritdoc/>
+    public async Task<Organization?> GetOrganizationByIdAsync(Guid id, CancellationToken ct = default)
+        => await _organizationRepository.GetByIdAsync(id, ct);
+
+    /// <inheritdoc/>
+    public async Task<List<Organization>> GetAllOrganizationsAsync(CancellationToken ct = default)
+        => await _organizationRepository.GetAllAsync(ct);
+
+    /// <inheritdoc/>
+    public async Task<Organization> UpdateOrganizationAsync(Guid id, Organization organization, CancellationToken ct = default)
+    {
+        // GetByIdAsync runs through the tenant-scoped query filter, so this also
+        // verifies the Organization belongs to the current tenant.
+        var existing = await _organizationRepository.GetByIdAsync(id, ct)
+            ?? throw new InvalidOperationException($"Organization {id} does not exist.");
+
+        existing.Name = organization.Name;
+
+        return await _organizationRepository.UpdateAsync(existing, ct);
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteOrganizationAsync(Guid id, CancellationToken ct = default)
+        => await _organizationRepository.DeleteAsync(id, ct);
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private Guid CurrentTenantIdOrThrow()
